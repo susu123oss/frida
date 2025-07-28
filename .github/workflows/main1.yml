@@ -1,0 +1,44 @@
+name: Build Frida 16.5.6 for iOS arm64e
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_arch:
+        description: 'iOS Architecture (e.g., arm64e)'
+        required: true
+        default: 'arm64e'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30  # 防止无限挂起
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0  # 确保获取全部历史
+
+      - name: Install Xcode
+        run: |
+          sudo xcode-select --install || true
+          sudo xcodebuild -license accept
+
+      - name: Install dependencies
+        run: |
+          brew update-reset
+          brew install automake libtool pkg-config
+          pip3 install colorama prompt-toolkit pyyaml
+
+      - name: Build Frida
+        run: |
+          git checkout 16.5.6
+          export IOS_ARCH=${{ github.event.inputs.target_arch || 'arm64e' }}
+          make core-ios-$IOS_ARCH -j4  # 并行编译加速
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frida-server-${{ github.event.inputs.target_arch || 'arm64e' }}
+          path: build/frida-ios-${{ github.event.inputs.target_arch || 'arm64e' }}/bin/frida-server
