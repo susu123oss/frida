@@ -1,0 +1,34 @@
+name: Build Frida 16.5.6 for iOS arm64e
+
+on:
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: macos-latest  # 必须用 macOS（Xcode 依赖）
+    steps:
+      - name: Checkout Frida
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive  # 确保拉取所有依赖
+
+      - name: Install Build Tools
+        run: |
+          brew install automake libtool pkg-config
+          pip3 install colorama prompt-toolkit pyyaml
+
+      - name: Checkout v16.5.6
+        run: |
+          git fetch --tags
+          git checkout 16.5.6
+
+      - name: Build for iOS arm64e
+        run: |
+          export IOS_ARCH=arm64e
+          make core-ios-$IOS_ARCH
+
+      - name: Upload Frida-server
+        uses: actions/upload-artifact@v3
+        with:
+          name: frida-server-ios-arm64e
+          path: build/frida-ios-arm64e/bin/frida-server
