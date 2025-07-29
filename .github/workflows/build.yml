@@ -1,0 +1,67 @@
+name: Build Frida 16.5.6 for arm64e
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Debug
+          - Release
+
+jobs:
+  build:
+    runs-on: macos-12
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - name: Set up Homebrew
+      uses: Homebrew/actions/setup-homebrew@master
+      
+    - name: Install dependencies
+      run: |
+        brew install cmake ninja pkg-config wget python3 openssl
+        
+    - name: Download Frida source
+      run: |
+        mkdir -p $HOME/frida-build
+        cd $HOME/frida-build
+        wget https://github.com/frida/frida/archive/refs/tags/16.5.6.tar.gz
+        tar -xzf 16.5.6.tar.gz
+        
+    - name: Configure build
+      run: |
+        cd $HOME/frida-build/frida-16.5.6
+        mkdir build
+        cd build
+        cmake -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type }} \
+          -DCMAKE_OSX_ARCHITECTURES=arm64e \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+          -DENABLE_CDS=OFF \
+          -DENABLE_V8=OFF \
+          ..
+          
+    - name: Build
+      run: |
+        cd $HOME/frida-build/frida-16.5.6/build
+        ninja
+        
+    - name: Package artifacts
+      run: |
+        cd $HOME/frida-build
+        mkdir -p frida-16.5.6-arm64e
+        cp -Rf frida-16.5.6/build/* frida-16.5.6-arm64e/
+        tar -czf frida-16.5.6-arm64e.tar.gz frida-16.5.6-arm64e
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frida-16.5.6-arm64e
+        path: $HOME/frida-build/frida-16.5.6-arm64e.tar.gz
+        retention-days: 7    
