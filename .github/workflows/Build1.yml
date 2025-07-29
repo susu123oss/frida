@@ -1,0 +1,107 @@
+name: Build Frida 16.5.6 DEB for iPhone 6s
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Debug
+          - Release
+
+jobs:
+  build:
+    runs-on: macos-12
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - name: Set up Homebrew
+      uses: Homebrew/actions/setup-homebrew@master
+      
+    - name: Install dependencies
+      run: |
+        brew install cmake ninja pkg-config wget python3 openssl dpkg ldid
+        sudo gem install cocoapods-deintegrate cocoapods-clean
+        
+    - name: Download Frida source
+      run: |
+        mkdir -p $HOME/frida-build
+        cd $HOME/frida-build
+        wget https://github.com/frida/frida/archive/refs/tags/16.5.6.tar.gz
+        tar -xzf 16.5.6.tar.gz
+        
+    - name: Configure build for arm64 (iPhone 6s)
+      run: |
+        cd $HOME/frida-build/frida-16.5.6
+        mkdir build
+        cd build
+        cmake -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type }} \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk \
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_IOS_INSTALL_COMBINED=ON \
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
+          -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="" \
+          -DENABLE_CDS=OFF \
+          -DENABLE_V8=OFF \
+          ..
+          
+    - name: Build
+      run: |
+        cd $HOME/frida-build/frida-16.5.6/build
+        ninja
+        
+    - name: Create DEB package structure
+      run: |
+        cd $HOME/frida-build
+        mkdir -p frida-deb/DEBIAN
+        mkdir -p frida-deb/usr/lib
+        mkdir -p frida-deb/usr/bin
+        mkdir -p frida-deb/usr/include/frida
+        
+        # Copy libraries
+        cp -Rf frida-16.5.6/build/lib/* frida-deb/usr/lib/
+        
+        # Copy binaries
+        cp frida-16.5.6/build/bin/frida* frida-deb/usr/bin/
+        
+        # Copy headers
+        cp -Rf frida-16.5.6/include/* frida-deb/usr/include/frida/
+        
+    - name: Create control file
+      run: |
+        cat > $HOME/frida-build/frida-deb/DEBIAN/control << EOF
+Package: frida
+Version: 16.5.6
+Architecture: arm64
+Maintainer: Your Name <your.email@example.com>
+Description: Dynamic code instrumentation toolkit
+Homepage: https://frida.re
+Section: Development
+Priority: Optional
+Depends: libc6 (>= 2.25), libssl1.1 (>= 1.1.1)
+EOF
+        
+    - name: Set permissions
+      run: |
+        chmod -R 755 $HOME/frida-build/frida-deb
+        
+    - name: Build DEB package
+      run: |
+        cd $HOME/frida-build
+        dpkg-deb -b frida-deb frida_16.5.6_arm64.deb
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frida-16.5.6-arm64-deb
+        path: $HOME/frida-build/frida_16.5.6_arm64.deb
+        retention-days: 7    
